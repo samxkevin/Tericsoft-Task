@@ -3,43 +3,83 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI IT Support Assistant</title>
+  <meta name="description" content="AI-powered IT support assistant">
+  <title>IT Support Assistant</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <main class="container">
   <header class="app-header">
-    <h1>IT Support Assistant</h1>
+    <div class="brand-row">
+      <div class="brand-mark" aria-hidden="true">IT</div>
+      <div>
+        <p class="eyebrow">INTERNAL SUPPORT</p>
+        <h1>IT Support Assistant</h1>
+      </div>
+      <span class="status-pill"><span class="status-dot"></span>AI assisted</span>
+    </div>
     <p class="subtitle">
-      Describe your technical problem below. The assistant searches an internal
-      knowledge base and uses an AI model (Cohere) to suggest
-      troubleshooting steps.
+      Describe a technical problem and get practical troubleshooting steps grounded
+      in the internal knowledge base.
     </p>
     <div id="llm-banner" class="banner hidden" role="alert"></div>
   </header>
 
-  <section class="card">
+  <section class="card ask-card">
+    <div class="section-heading">
+      <div>
+        <span class="step-label">1</span>
+        <div>
+          <h2>Describe your IT problem</h2>
+          <p class="section-help">Include any error message, device, or symptom you have noticed.</p>
+        </div>
+      </div>
+    </div>
+
     <form id="ticket-form">
-      <label for="question"><strong>Describe your IT problem</strong></label>
-      <textarea id="question" name="question" rows="4" maxlength="1000" required
-        placeholder="e.g. My laptop keeps disconnecting from the office Wi-Fi"></textarea>
+      <label for="question" class="sr-only">Describe your IT problem</label>
+      <textarea id="question" name="question" rows="5" maxlength="1000" required
+        placeholder="Example: My laptop keeps disconnecting from the office Wi-Fi. What should I check?"></textarea>
       <div class="form-row">
         <span id="char-count" class="muted">0 / 1000</span>
-        <button id="submit-btn" type="submit">Get help</button>
+        <button id="submit-btn" type="submit">
+          <span>Get troubleshooting help</span>
+          <span aria-hidden="true">→</span>
+        </button>
       </div>
     </form>
 
-    <div id="loading" class="loading hidden">
+    <div class="quick-hints" aria-label="Example questions">
+      <span>Try:</span>
+      <button type="button" class="hint" data-question="My printer shows offline and nothing is printing.">Printer offline</button>
+      <button type="button" class="hint" data-question="My laptop keeps disconnecting from Wi-Fi.">Wi-Fi disconnecting</button>
+      <button type="button" class="hint" data-question="My computer has become very slow.">Computer is slow</button>
+    </div>
+
+    <div id="loading" class="loading hidden" aria-live="polite">
       <span class="spinner" aria-hidden="true"></span>
-      <span>Searching the knowledge base and generating an answer&hellip;</span>
+      <div>
+        <strong>Working on your request</strong>
+        <span>Searching the knowledge base and generating an answer...</span>
+      </div>
     </div>
     <div id="error" class="error hidden" role="alert"></div>
   </section>
 
   <section id="result" class="card hidden">
-    <p id="ticket-meta" class="muted"></p>
-    <h2>AI troubleshooting response</h2>
-    <div id="ai-response" class="ai-response"></div>
+    <div class="result-header">
+      <div>
+        <p class="section-kicker">RESULT</p>
+        <h2>AI troubleshooting response</h2>
+      </div>
+      <span id="ticket-meta" class="ticket-badge"></span>
+    </div>
+
+    <div class="ai-response-wrap">
+      <div class="response-label"><span class="response-dot"></span>Generated guidance</div>
+      <div id="ai-response" class="ai-response"></div>
+    </div>
+
     <details class="context">
       <summary id="context-summary">Knowledge-base context used</summary>
       <div id="context"></div>
@@ -47,11 +87,22 @@
   </section>
 
   <section class="card">
-    <h2>Recent tickets</h2>
+    <div class="result-header">
+      <div>
+        <p class="section-kicker">HISTORY</p>
+        <h2>Recent tickets</h2>
+      </div>
+      <span class="muted">Last 10</span>
+    </div>
     <ul id="ticket-list" class="ticket-list">
-      <li class="muted">Loading&hellip;</li>
+      <li class="muted">Loading...</li>
     </ul>
   </section>
+
+  <footer class="footer">
+    <span>FastAPI · SQLite · Cohere</span>
+    <span>Internal IT Support Assistant</span>
+  </footer>
 </main>
 <script src="/static/app.js"></script>
 </body>
