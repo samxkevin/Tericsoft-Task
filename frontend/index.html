@@ -3,120 +3,120 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="AI-powered IT support assistant">
-  <title>IT Support Assistant</title>
+  <meta name="description" content="AI-powered internal IT support assistant">
+  <title>Support / AI</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
-  <link rel="stylesheet" href="/static/editorial.css">
 </head>
 <body>
-<main class="app-shell">
-  <header class="topbar">
-    <a class="brand" href="#top" aria-label="IT Support Assistant home">SUPPORT / AI</a>
-    <div class="topbar-meta">
-      <span class="mono-label">COHERE</span>
-      <span class="status-pill"><span class="status-dot"></span>Online</span>
-    </div>
-  </header>
-
-  <section class="hero" id="top">
-    <div class="hero-copy">
-      <p class="eyebrow">INTERNAL IT SUPPORT</p>
-      <h1>Describe the problem.<br>We'll work through it.</h1>
-      <p class="hero-lede">
-        A small support assistant that searches the internal knowledge base first,
-        then uses AI to turn the relevant context into practical troubleshooting steps.
-      </p>
-    </div>
-    <div class="hero-rule" aria-hidden="true"></div>
-  </section>
-
-  <section class="workspace">
-    <section class="panel ask-panel">
-      <div class="panel-heading">
-        <div>
-          <p class="section-kicker">01 / REQUEST</p>
-          <h2>What is going wrong?</h2>
-          <p class="panel-help">Mention the device, symptom, or exact error message when possible.</p>
-        </div>
-        <span class="panel-index mono-label">INPUT</span>
+  <main class="site" id="top">
+    <header class="nav">
+      <a class="brand" href="#top">SUPPORT / AI</a>
+      <div class="nav-meta">
+        <span>COHERE</span>
+        <span class="online"><i></i>Online</span>
       </div>
+    </header>
 
-      <form id="ticket-form">
-        <label for="question" class="sr-only">Describe your IT problem</label>
-        <textarea id="question" name="question" rows="6" maxlength="1000" required
-          placeholder="Example: My laptop keeps disconnecting from the office Wi-Fi. What should I check?"></textarea>
-        <div class="form-footer">
-          <span id="char-count" class="muted">0 / 1000</span>
-          <button id="submit-btn" type="submit">
-            <span>Get troubleshooting help</span>
-            <span aria-hidden="true">→</span>
-          </button>
-        </div>
-      </form>
-
-      <div class="quick-hints" aria-label="Example questions">
-        <span class="hint-label mono-label">TRY</span>
-        <button type="button" class="hint" data-question="My printer shows offline and nothing is printing.">Printer offline</button>
-        <button type="button" class="hint" data-question="My laptop keeps disconnecting from Wi-Fi.">Wi-Fi disconnecting</button>
-        <button type="button" class="hint" data-question="My computer has become very slow.">Computer is slow</button>
+    <section class="hero">
+      <div class="hero-inner">
+        <p class="eyebrow">INTERNAL IT SUPPORT</p>
+        <h1>Describe the problem.<br><em>We'll work through it.</em></h1>
+        <p class="hero-copy">
+          Search the internal knowledge base first, then turn the relevant context into practical troubleshooting steps with AI.
+        </p>
+        <div class="hero-line" aria-hidden="true"></div>
       </div>
-
-      <div id="loading" class="loading hidden" aria-live="polite">
-        <span class="spinner" aria-hidden="true"></span>
-        <div>
-          <strong>Working on your request</strong>
-          <span>Searching the knowledge base and generating an answer...</span>
-        </div>
-      </div>
-      <div id="error" class="error hidden" role="alert"></div>
-      <div id="llm-banner" class="banner hidden" role="alert"></div>
     </section>
 
-    <section id="result" class="panel result-panel hidden">
-      <div class="panel-heading">
-        <div>
-          <p class="section-kicker">02 / GUIDANCE</p>
-          <h2>Support response</h2>
+    <section class="workspace">
+      <div class="section-marker"><span>01</span><b>REQUEST</b></div>
+
+      <section class="request-panel">
+        <div class="panel-intro">
+          <div>
+            <h2>What is going wrong?</h2>
+            <p>Give the device, symptom, or exact error message when possible.</p>
+          </div>
+          <span class="mono-note">LOCAL KB + AI</span>
         </div>
-        <span id="ticket-meta" class="ticket-badge"></span>
-      </div>
 
-      <div class="response-shell">
-        <div class="response-bar">
-          <span class="response-dot"></span>
-          <span class="mono-label">AI GENERATED / KNOWLEDGE GROUNDED</span>
+        <form id="ticket-form">
+          <label for="question" class="sr-only">Describe your IT problem</label>
+          <textarea id="question" name="question" rows="6" maxlength="1000" required placeholder="Example: My laptop keeps disconnecting from the office Wi-Fi. What should I check?"></textarea>
+          <div class="input-meta">
+            <span id="char-count">0 / 1000</span>
+            <button id="submit-btn" type="submit">
+              <span>Get troubleshooting help</span>
+              <span aria-hidden="true">→</span>
+            </button>
+          </div>
+        </form>
+
+        <div class="quick-hints" aria-label="Example questions">
+          <span class="hint-prefix">TRY</span>
+          <button type="button" class="hint" data-question="My printer shows offline and nothing is printing.">Printer offline</button>
+          <button type="button" class="hint" data-question="My laptop keeps disconnecting from Wi-Fi.">Wi-Fi disconnecting</button>
+          <button type="button" class="hint" data-question="My computer has become very slow.">Computer is slow</button>
         </div>
-        <div id="ai-response" class="ai-response"></div>
-      </div>
 
-      <details class="context">
-        <summary id="context-summary">Knowledge-base context used</summary>
-        <div id="context"></div>
-      </details>
-    </section>
+        <div id="loading" class="loading hidden" aria-live="polite">
+          <span class="spinner" aria-hidden="true"></span>
+          <div>
+            <strong>Working on your request</strong>
+            <span>Searching the knowledge base and generating an answer...</span>
+          </div>
+        </div>
 
-    <section class="panel history-panel">
-      <div class="panel-heading">
-        <div>
-          <p class="section-kicker">03 / HISTORY</p>
+        <div id="error" class="error hidden" role="alert"></div>
+        <div id="llm-banner" class="banner hidden" role="alert"></div>
+      </section>
+
+      <div class="section-marker"><span>02</span><b>GUIDANCE</b></div>
+
+      <section id="result" class="result-panel hidden">
+        <div class="result-heading">
+          <div>
+            <p class="eyebrow small">AI RESPONSE</p>
+            <h2>Here is what to try.</h2>
+          </div>
+          <span id="ticket-meta" class="ticket-meta"></span>
+        </div>
+
+        <div class="response-card">
+          <div class="response-top">
+            <span><i></i> KNOWLEDGE GROUNDED</span>
+            <span>COHERE</span>
+          </div>
+          <div id="ai-response" class="ai-response"></div>
+        </div>
+
+        <details class="context">
+          <summary id="context-summary">Knowledge-base context used</summary>
+          <div id="context"></div>
+        </details>
+      </section>
+
+      <div class="section-marker"><span>03</span><b>HISTORY</b></div>
+
+      <section class="history-panel">
+        <div class="history-heading">
           <h2>Recent tickets</h2>
+          <span class="mono-note">LAST 10</span>
         </div>
-        <span class="mono-label">LAST 10</span>
-      </div>
-      <ul id="ticket-list" class="ticket-list">
-        <li class="muted">Loading...</li>
-      </ul>
+        <ul id="ticket-list" class="ticket-list">
+          <li class="muted">Loading...</li>
+        </ul>
+      </section>
     </section>
-  </section>
 
-  <footer class="footer">
-    <span>FASTAPI · SQLITE · COHERE</span>
-    <span>INTERNAL IT SUPPORT ASSISTANT</span>
-  </footer>
-</main>
-<script src="/static/app.js"></script>
+    <footer class="footer">
+      <span>FASTAPI · SQLITE · COHERE</span>
+      <span>INTERNAL IT SUPPORT ASSISTANT</span>
+    </footer>
+  </main>
+  <script src="/static/app.js"></script>
 </body>
 </html>
