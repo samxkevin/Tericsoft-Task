@@ -121,7 +121,7 @@ def test_llm_not_configured_returns_503_and_stores_nothing(client):
     before = client.get("/api/tickets").json()
     response = client.post("/api/tickets", json={"question": "My printer is offline"})
     assert response.status_code == 503
-    assert "GEMINI_API_KEY" in response.json()["detail"]
+    assert "COHERE_API_KEY_PRIMARY" in response.json()["detail"]
     after = client.get("/api/tickets").json()
     assert len(after) == len(before), "no ticket should be stored on LLM failure"
 

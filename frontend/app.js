@@ -177,8 +177,9 @@ async function checkLLMStatus() {
     const health = await api("/api/health");
     if (!health.llm_configured) {
       llmBanner.textContent =
-        "No LLM API key is configured. Copy .env.example to .env, add a free " +
-        "Gemini or Groq API key, and restart the backend to enable AI answers.";
+        "No LLM API key is configured. Copy .env.example to .env, add a " +
+        "Cohere API key (COHERE_API_KEY_PRIMARY), and restart the backend to " +
+        "enable AI answers.";
       llmBanner.classList.remove("hidden");
     }
   } catch (error) {

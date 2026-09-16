@@ -2,10 +2,10 @@
 
 A small full-stack demo application. A user asks an IT support question in a
 simple web UI; a FastAPI backend searches a local SQL knowledge base for
-relevant articles, sends the question **plus the retrieved context** to a free
-LLM (Google **Gemini** or **Groq**), and displays the AI troubleshooting
-answer in the UI. The question, the retrieved context and the AI answer are
-stored as a ticket in SQLite.
+relevant articles, sends the question **plus the retrieved context** to
+**Cohere's V2 Chat API** (with primary/fallback keys), and displays the AI
+troubleshooting answer in the UI. The question, the retrieved context and the
+AI answer are stored as a ticket in SQLite.
 
 ## Architecture
 
@@ -19,7 +19,7 @@ backend/main.py  (FastAPI)
         |-- backend/search.py           keyword relevance search (no vectors)
         |        \-- knowledge_base.py  14 seeded IT problems + solutions
         |
-        |-- backend/llm.py              Gemini or Groq REST call (env-configured)
+        |-- backend/llm.py              Cohere V2 chat call (primary + fallback)
         |
         \-- backend/database.py         SQLAlchemy + SQLite
                  \-- tables: knowledge_base, tickets
@@ -39,7 +39,7 @@ backend/
     schemas.py         Pydantic request/response schemas
     knowledge_base.py  seed data + DB helpers
     search.py          keyword relevance search
-    llm.py             Gemini / Groq integration
+    llm.py             Cohere V2 chat integration (primary + fallback)
 frontend/
     index.html         single-page UI
     style.css          minimal styling
@@ -53,8 +53,8 @@ requirements-dev.txt   adds pytest
 ## Requirements
 
 - Python 3.10+
-- A **free** API key from [Google AI Studio](https://aistudio.google.com/apikey)
-  (Gemini) **or** [Groq](https://console.groq.com/keys). No paid services.
+- A Cohere API key (primary, plus optionally a fallback key) from
+  <https://dashboard.cohere.com/api-keys>
 
 ## Installation
 
@@ -68,23 +68,22 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
 cp .env.example .env               # Windows: copy .env.example .env
-# now edit .env and paste your API key
+# now edit .env and paste your API key(s)
 ```
 
 ## Environment variables
 
-| Variable              | Default                  | Purpose                                       |
-| --------------------- | ------------------------ | --------------------------------------------- |
-| `LLM_PROVIDER`        | `gemini`                 | `gemini` or `groq`                            |
-| `GEMINI_API_KEY`      | -                        | required when `LLM_PROVIDER=gemini`           |
-| `GROQ_API_KEY`        | -                        | required when `LLM_PROVIDER=groq`             |
-| `GEMINI_MODEL`        | `gemini-2.5-flash`       | Gemini model override                         |
-| `GROQ_MODEL`          | `llama-3.3-70b-versatile`| Groq model override                           |
-| `LLM_TIMEOUT_SECONDS` | `30`                     | timeout for the LLM HTTP call                 |
-| `DATABASE_URL`        | `sqlite:///<root>/it_support.db` | database location                      |
+| Variable                  | Default                  | Purpose                              |
+| ------------------------- | ------------------------ | ------------------------------------ |
+| `COHERE_API_KEY_PRIMARY`  | -                        | primary API key (required)           |
+| `COHERE_PRIMARY_MODEL`    | `command-a-plus-05-2026` | model used with the primary key      |
+| `COHERE_API_KEY_FALLBACK` | -                        | fallback API key (optional)          |
+| `COHERE_FALLBACK_MODEL`   | `command-a-03-2025`      | model used with the fallback key     |
+| `LLM_TIMEOUT_SECONDS`     | `30`                     | timeout per LLM HTTP call            |
+| `DATABASE_URL`            | `sqlite:///<root>/it_support.db` | database location            |
 
 Keys are read only from the environment / `.env` (git-ignored). They are sent
-to the provider in an authorization header and never logged.
+to Cohere as a `Bearer` token and never logged.
 
 ## Running the application
 
@@ -144,14 +143,24 @@ Plain keyword scoring — no embeddings, easy to explain:
 6. **Fallback**: if nothing scores >= 2, the context is empty and the LLM is
    explicitly told that no knowledge-base articles were found.
 
-## LLM integration
+## LLM integration (Cohere V2, primary + fallback)
 
-- Provider and key come from environment variables (`.env`), never hard-coded.
+- Endpoint: `POST https://api.cohere.com/v2/chat` with
+  `Authorization: Bearer <key>`, `Content-Type: application/json`,
+  `stream: false`, and `messages` with system/user roles.
+- Configuration comes from environment variables only (`.env`), never
+  hard-coded.
+- **Failover**: the primary key + primary model is tried first. If that
+  request fails for any provider-side reason (authentication, rate limiting,
+  timeout, network error, provider failure), the fallback key + fallback
+  model is tried once. Keys are not tied to models - either key may serve
+  either model. There are never more than two attempts; if both fail, one
+  clear error summarising both failures is returned.
 - The prompt contains the system rules, the retrieved knowledge-base context
   and the user question. The model is instructed to give practical numbered
   steps, **not to invent facts**, and to clearly say when the context is
   insufficient.
-- Failures are honest and explicit: missing key -> `503` with instructions;
+- Failures are honest and explicit: no key at all -> `503` with instructions;
   rejected key / provider error -> `502`; timeout -> `504`. No answer is ever
   faked or cached as if it came from the API.
 
@@ -172,9 +181,9 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-The tests cover validation, search relevance/fallback, both LLM provider
-clients (against a local mock server — no network, no real keys) and the full
-API flow including persistence.
+The tests cover validation, search relevance/fallback, the Cohere V2 client
+including primary/fallback failover (against a local mock server — no network,
+no real keys) and the full API flow including persistence.
 
 Quick manual checks with `curl` are shown in the API section above.
 
@@ -182,4 +191,5 @@ Quick manual checks with `curl` are shown in the API section above.
 
 - Keyword search, not semantic (embeddings/vector search would improve recall).
 - SQLite is single-writer; fine for a demo, not a multi-user production service.
-- No authentication, no streaming responses, no Docker (by design for this MVP).
+- LLM failover is one level deep (primary -> fallback) with no further retries.
+- No authentication, no streaming responses (`stream: false` by design), no Docker.

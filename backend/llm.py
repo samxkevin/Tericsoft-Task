@@ -1,13 +1,26 @@
-"""LLM integration: Google Gemini or Groq, configured via environment variables.
+"""LLM integration: Cohere V2 Chat API with primary/fallback failover.
 
-Only free-tier-friendly providers are supported (Google Gemini and Groq). The
-API key is read from the environment (never hard-coded, never logged) and is
-sent in an authorization header, not in the URL.
+Configuration comes from environment variables (see .env.example):
 
-All failures raise LLMError carrying an HTTP status code the API layer can
-return directly:
+    COHERE_API_KEY_PRIMARY    primary API key
+    COHERE_PRIMARY_MODEL      primary model   (default command-a-plus-05-2026)
+    COHERE_API_KEY_FALLBACK   fallback API key (optional)
+    COHERE_FALLBACK_MODEL     fallback model  (default command-a-03-2025)
 
-- 503: provider/key not configured (action needed by the operator)
+Behaviour:
+1. Call the primary key with the primary model.
+2. If that attempt fails for any provider-side reason (authentication, rate
+   limiting, provider failure, timeout, network error, unusable response),
+   call the fallback key with the fallback model once. Keys are not tied to
+   models - either key may serve either model.
+3. Never more than two attempts in total (no infinite retries).
+4. If all attempts fail, raise one clear LLMError for the API layer.
+
+API keys are read from the environment only (never hard-coded), sent as a
+Bearer token, never logged and never included in error messages.
+
+LLMError status codes surfaced to the API layer:
+- 503: no API key configured at all (action needed by the operator)
 - 502: provider rejected the request or returned an unusable response
 - 504: provider timed out
 """
@@ -18,12 +31,10 @@ import httpx
 
 from . import config  # noqa: F401  (importing config loads the .env file)
 
-GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+COHERE_URL = "https://api.cohere.com/v2/chat"
 
-DEFAULT_PROVIDER = "gemini"
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
-DEFAULT_GROQ_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_PRIMARY_MODEL = "command-a-plus-05-2026"
+DEFAULT_FALLBACK_MODEL = "command-a-03-2025"
 DEFAULT_TIMEOUT_SECONDS = 30.0
 
 SYSTEM_PROMPT = """You are an experienced IT support technician. A user asks you a technical support question.
@@ -44,37 +55,32 @@ class LLMError(Exception):
         self.status_code = status_code
 
 
-def _default_model(provider: str) -> str:
-    return DEFAULT_GEMINI_MODEL if provider == "gemini" else DEFAULT_GROQ_MODEL
+def _attempts() -> list[dict]:
+    """Ordered (key, model) attempts built from the environment.
 
+    Primary first, then fallback. A key that is missing/empty is skipped, so
+    configuring only the fallback key works directly. Raises LLMError(503)
+    when no key is configured at all.
+    """
+    primary_key = (os.getenv("COHERE_API_KEY_PRIMARY") or "").strip()
+    fallback_key = (os.getenv("COHERE_API_KEY_FALLBACK") or "").strip()
+    primary_model = (os.getenv("COHERE_PRIMARY_MODEL") or "").strip() or DEFAULT_PRIMARY_MODEL
+    fallback_model = (os.getenv("COHERE_FALLBACK_MODEL") or "").strip() or DEFAULT_FALLBACK_MODEL
 
-def _get_config() -> dict[str, str]:
-    """Read and validate the LLM configuration from environment variables."""
-    provider = (os.getenv("LLM_PROVIDER") or DEFAULT_PROVIDER).strip().lower()
-    if provider not in ("gemini", "groq"):
+    attempts = []
+    if primary_key:
+        attempts.append({"key": primary_key, "model": primary_model, "label": "primary"})
+    if fallback_key:
+        attempts.append({"key": fallback_key, "model": fallback_model, "label": "fallback"})
+
+    if not attempts:
         raise LLMError(
-            f"Invalid LLM_PROVIDER '{provider}'. Use 'gemini' or 'groq' in your .env file.",
+            "The LLM is not configured: no Cohere API key found. Add "
+            "COHERE_API_KEY_PRIMARY (and optionally COHERE_API_KEY_FALLBACK) to the "
+            ".env file (see .env.example).",
             status_code=503,
         )
-
-    key_var = "GEMINI_API_KEY" if provider == "gemini" else "GROQ_API_KEY"
-    model_var = "GEMINI_MODEL" if provider == "gemini" else "GROQ_MODEL"
-    api_key = (os.getenv(key_var) or "").strip()
-    model = (os.getenv(model_var) or "").strip() or _default_model(provider)
-
-    if not api_key:
-        hint = ""
-        other_var = "GROQ_API_KEY" if provider == "gemini" else "GEMINI_API_KEY"
-        if (os.getenv(other_var) or "").strip():
-            other_provider = "groq" if provider == "gemini" else "gemini"
-            hint = f" (A {other_var} is set - you can set LLM_PROVIDER={other_provider} to use it.)"
-        raise LLMError(
-            f"The LLM is not configured: {key_var} is missing. Add your free API key "
-            f"to the .env file (see .env.example).{hint}",
-            status_code=503,
-        )
-
-    return {"provider": provider, "api_key": api_key, "model": model}
+    return attempts
 
 
 def _timeout() -> float:
@@ -115,120 +121,121 @@ def _snippet(text: str, limit: int = 300) -> str:
     return text[:limit] + ("..." if len(text) > limit else "")
 
 
-def _request_json(
-    url: str, headers: dict[str, str], payload: dict, timeout: float, provider: str
-) -> dict:
-    """POST the payload and return the parsed JSON body, with clear LLMErrors."""
+def _parse_answer(data: dict) -> str:
+    """Extract the assistant text from a Cohere V2 chat response.
+
+    V2 returns message.content as a list of content blocks; a plain string is
+    also accepted defensively.
+    """
     try:
-        response = httpx.post(url, headers=headers, json=payload, timeout=timeout)
+        content = data["message"]["content"]
+    except (KeyError, TypeError):
+        raise LLMError("returned an unexpected response shape", status_code=502)
+
+    if isinstance(content, str):
+        text = content
+    elif isinstance(content, list):
+        text = "\n".join(
+            block.get("text", "")
+            for block in content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+    else:
+        text = ""
+
+    if not text.strip():
+        raise LLMError("returned an empty response", status_code=502)
+    return text.strip()
+
+
+def _chat_once(attempt: dict, messages: list[dict], timeout: float) -> str:
+    """Perform one Cohere V2 chat request. Raises LLMError on any failure."""
+    payload = {"model": attempt["model"], "messages": messages, "stream": False}
+    headers = {
+        "Content-Type": "application/json",
+        # The key goes in the Authorization header only - never in the URL.
+        "Authorization": f"Bearer {attempt['key']}",
+    }
+    try:
+        response = httpx.post(COHERE_URL, headers=headers, json=payload, timeout=timeout)
     except httpx.TimeoutException:
         raise LLMError(
-            f"The {provider} API did not respond within {timeout:.0f} seconds. "
-            "Please try again.",
-            status_code=504,
+            f"did not respond within {timeout:.0f} seconds", status_code=504
         )
     except httpx.HTTPError as exc:
         raise LLMError(
-            f"Could not reach the {provider} API ({exc.__class__.__name__}). "
-            "Check your network connection.",
+            f"could not be reached ({exc.__class__.__name__}); check the network "
+            "connection",
             status_code=502,
         )
 
     if response.status_code in (401, 403):
         raise LLMError(
-            f"The {provider} API rejected the API key (HTTP {response.status_code}). "
-            "Check the key in your .env file.",
+            f"the API key was rejected (HTTP {response.status_code}); check the key "
+            "in the .env file",
             status_code=502,
         )
+    if response.status_code == 429:
+        raise LLMError("the rate limit was reached (HTTP 429)", status_code=502)
     if response.status_code != 200:
         raise LLMError(
-            f"The {provider} API returned HTTP {response.status_code}: "
-            f"{_snippet(response.text)}",
+            f"returned HTTP {response.status_code}: {_snippet(response.text)}",
             status_code=502,
         )
     try:
-        return response.json()
+        data = response.json()
     except ValueError:
-        raise LLMError(
-            f"The {provider} API returned a non-JSON response.", status_code=502
-        )
-
-
-def _call_gemini(cfg: dict, messages: list[dict], timeout: float) -> str:
-    """Call Google Gemini's generateContent REST endpoint."""
-    prompt = f"{messages[0]['content']}\n\n---\n\n{messages[1]['content']}"
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.2},
-    }
-    url = GEMINI_URL.format(model=cfg["model"])
-    headers = {
-        "Content-Type": "application/json",
-        # The key goes in a header, never in the URL.
-        "x-goog-api-key": cfg["api_key"],
-    }
-    data = _request_json(url, headers, payload, timeout, "Gemini")
-    try:
-        parts = data["candidates"][0]["content"]["parts"]
-        # Thinking models may return several parts; keep the real text ones.
-        text = "\n".join(
-            part["text"]
-            for part in parts
-            if isinstance(part, dict) and part.get("text") and not part.get("thought")
-        )
-    except (KeyError, IndexError, TypeError):
-        raise LLMError(
-            "Gemini returned an unexpected response (possibly empty or blocked).",
-            status_code=502,
-        )
-    if not text.strip():
-        raise LLMError("Gemini returned an empty response.", status_code=502)
-    return text.strip()
-
-
-def _call_groq(cfg: dict, messages: list[dict], timeout: float) -> str:
-    """Call Groq's OpenAI-compatible chat-completions endpoint."""
-    payload = {"model": cfg["model"], "messages": messages, "temperature": 0.2}
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {cfg['api_key']}",
-    }
-    data = _request_json(GROQ_URL, headers, payload, timeout, "Groq")
-    try:
-        text = data["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError):
-        raise LLMError("Groq returned an unexpected response.", status_code=502)
-    if not text or not text.strip():
-        raise LLMError("Groq returned an empty response.", status_code=502)
-    return text.strip()
+        raise LLMError("returned a non-JSON response", status_code=502)
+    return _parse_answer(data)
 
 
 def generate_answer(question: str, context_items: list[dict]) -> str:
-    """Generate a troubleshooting answer for `question` using the retrieved context."""
-    cfg = _get_config()
+    """Generate a troubleshooting answer, trying primary then fallback.
+
+    At most two attempts are made (one per configured key). If all attempts
+    fail, a single LLMError summarising every failure is raised; it never
+    contains API keys.
+    """
+    attempts = _attempts()  # raises LLMError(503) when no key is configured
     messages = build_messages(question, context_items)
     timeout = _timeout()
-    if cfg["provider"] == "gemini":
-        return _call_gemini(cfg, messages, timeout)
-    return _call_groq(cfg, messages, timeout)
+
+    failures: list[str] = []
+    status_code = 502
+    for attempt in attempts:
+        try:
+            return _chat_once(attempt, messages, timeout)
+        except LLMError as exc:
+            failures.append(f"{attempt['label']} ({attempt['model']}): {exc}")
+            status_code = exc.status_code
+
+    summary = "; ".join(failures)
+    if len(failures) == 1:
+        raise LLMError(f"The Cohere chat request failed - {summary}", status_code=status_code)
+    raise LLMError(f"All Cohere attempts failed - {summary}", status_code=status_code)
 
 
 def llm_status() -> dict:
     """Non-raising configuration status, used by GET /api/health."""
-    provider = (os.getenv("LLM_PROVIDER") or DEFAULT_PROVIDER).strip().lower()
-    try:
-        cfg = _get_config()
+    primary_key = (os.getenv("COHERE_API_KEY_PRIMARY") or "").strip()
+    fallback_key = (os.getenv("COHERE_API_KEY_FALLBACK") or "").strip()
+    primary_model = (os.getenv("COHERE_PRIMARY_MODEL") or "").strip() or DEFAULT_PRIMARY_MODEL
+    fallback_model = (os.getenv("COHERE_FALLBACK_MODEL") or "").strip() or DEFAULT_FALLBACK_MODEL
+
+    if primary_key or fallback_key:
         return {
-            "provider": cfg["provider"],
-            "model": cfg["model"],
+            "provider": "cohere",
+            "model": primary_model if primary_key else fallback_model,
             "configured": True,
             "message": None,
         }
-    except LLMError as exc:
-        model = _default_model(provider) if provider in ("gemini", "groq") else ""
-        return {
-            "provider": provider,
-            "model": model,
-            "configured": False,
-            "message": str(exc),
-        }
+    return {
+        "provider": "cohere",
+        "model": primary_model,
+        "configured": False,
+        "message": (
+            "The LLM is not configured: no Cohere API key found. Add "
+            "COHERE_API_KEY_PRIMARY (and optionally COHERE_API_KEY_FALLBACK) to the "
+            ".env file (see .env.example)."
+        ),
+    }
