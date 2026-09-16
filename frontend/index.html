@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI IT Support Assistant</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main class="container">
+  <header class="app-header">
+    <h1>IT Support Assistant</h1>
+    <p class="subtitle">
+      Describe your technical problem below. The assistant searches an internal
+      knowledge base and uses an AI model (Gemini or Groq) to suggest
+      troubleshooting steps.
+    </p>
+    <div id="llm-banner" class="banner hidden" role="alert"></div>
+  </header>
+
+  <section class="card">
+    <form id="ticket-form">
+      <label for="question"><strong>Describe your IT problem</strong></label>
+      <textarea id="question" name="question" rows="4" maxlength="1000" required
+        placeholder="e.g. My laptop keeps disconnecting from the office Wi-Fi"></textarea>
+      <div class="form-row">
+        <span id="char-count" class="muted">0 / 1000</span>
+        <button id="submit-btn" type="submit">Get help</button>
+      </div>
+    </form>
+
+    <div id="loading" class="loading hidden">
+      <span class="spinner" aria-hidden="true"></span>
+      <span>Searching the knowledge base and generating an answer&hellip;</span>
+    </div>
+    <div id="error" class="error hidden" role="alert"></div>
+  </section>
+
+  <section id="result" class="card hidden">
+    <p id="ticket-meta" class="muted"></p>
+    <h2>AI troubleshooting response</h2>
+    <div id="ai-response" class="ai-response"></div>
+    <details class="context">
+      <summary id="context-summary">Knowledge-base context used</summary>
+      <div id="context"></div>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2>Recent tickets</h2>
+    <ul id="ticket-list" class="ticket-list">
+      <li class="muted">Loading&hellip;</li>
+    </ul>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

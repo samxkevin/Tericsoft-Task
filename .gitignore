@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Secrets - never commit real API keys
+.env
+
+# Local databases
+*.db
+*.sqlite3
+
+# Test / tooling caches
+.pytest_cache/
+.coverage
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
