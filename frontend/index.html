@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/editorial.css">
 </head>
 <body>
 <main class="app-shell">
@@ -29,7 +30,6 @@
         then uses AI to turn the relevant context into practical troubleshooting steps.
       </p>
     </div>
-
     <div class="hero-rule" aria-hidden="true"></div>
   </section>
 
@@ -48,7 +48,6 @@
         <label for="question" class="sr-only">Describe your IT problem</label>
         <textarea id="question" name="question" rows="6" maxlength="1000" required
           placeholder="Example: My laptop keeps disconnecting from the office Wi-Fi. What should I check?"></textarea>
-
         <div class="form-footer">
           <span id="char-count" class="muted">0 / 1000</span>
           <button id="submit-btn" type="submit">
