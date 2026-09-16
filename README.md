@@ -42,7 +42,7 @@ backend/
     llm.py             Cohere V2 chat integration (primary + fallback)
 frontend/
     index.html         single-page UI
-    style.css          minimal styling
+    style.css          responsive styling
     app.js             fetch calls, loading/error states
 tests/                 pytest suite (optional, dev-only)
 requirements.txt       runtime dependencies
@@ -80,7 +80,7 @@ cp .env.example .env               # Windows: copy .env.example .env
 | `COHERE_API_KEY_FALLBACK` | -                        | fallback API key (optional)          |
 | `COHERE_FALLBACK_MODEL`   | `command-a-03-2025`      | model used with the fallback key     |
 | `LLM_TIMEOUT_SECONDS`     | `30`                     | timeout per LLM HTTP call            |
-| `DATABASE_URL`            | `sqlite:///<root>/it_support.db` | database location            |
+| `DATABASE_URL`            | `sqlite:///./it_support.db` | database location                 |
 
 Keys are read only from the environment / `.env` (git-ignored). They are sent
 to Cohere as a `Bearer` token and never logged.
@@ -97,7 +97,10 @@ Then open <http://127.0.0.1:8000> in your browser.
 (Alternative: `python -m backend.main`.)
 
 On startup the app creates `it_support.db` and seeds the knowledge base
-(only if the table is empty). Interactive API docs: <http://127.0.0.1:8000/docs>.
+(only if the table is empty). **No separate database server, MySQL installation,
+or database configuration is required.** SQLite is a local file database managed
+by the application through SQLAlchemy. Interactive API docs:
+<http://127.0.0.1:8000/docs>.
 
 ## API endpoints
 
@@ -153,7 +156,7 @@ Plain keyword scoring — no embeddings, easy to explain:
 - **Failover**: the primary key + primary model is tried first. If that
   request fails for any provider-side reason (authentication, rate limiting,
   timeout, network error, provider failure), the fallback key + fallback
-  model is tried once. Keys are not tied to models - either key may serve
+  model is tried once. Keys are not tied to models — either key may serve
   either model. There are never more than two attempts; if both fail, one
   clear error summarising both failures is returned.
 - The prompt contains the system rules, the retrieved knowledge-base context
