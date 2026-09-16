@@ -1,6 +1,6 @@
 // IT Support Assistant - frontend logic.
 // Uses relative API URLs so the frontend works when served by FastAPI.
-// Dynamic content is inserted with textContent for safe rendering.
+// AI responses support a safe subset of Markdown formatting.
 
 const form = document.getElementById("ticket-form");
 const questionInput = document.getElementById("question");
@@ -67,6 +67,98 @@ async function api(path, options = {}) {
   return data;
 }
 
+function escapeHtml(value) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function formatInlineMarkdown(value) {
+  let text = escapeHtml(value);
+
+  text = text.replace(/`([^`]+)`/g, "<code>$1</code>");
+  text = text.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  text = text.replace(/__([^_]+)__/g, "<strong>$1</strong>");
+  text = text.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  text = text.replace(/_([^_]+)_/g, "<em>$1</em>");
+
+  return text;
+}
+
+function renderMarkdown(markdown) {
+  const lines = String(markdown || "").replace(/\r\n?/g, "\n").split("\n");
+  const output = [];
+  let paragraph = [];
+  let listType = null;
+  let listItems = [];
+
+  function flushParagraph() {
+    if (!paragraph.length) return;
+    output.push(`<p>${paragraph.map(formatInlineMarkdown).join("<br>")}</p>`);
+    paragraph = [];
+  }
+
+  function flushList() {
+    if (!listType || !listItems.length) return;
+    output.push(
+      `<${listType}>${listItems.map((item) => `<li>${formatInlineMarkdown(item)}</li>`).join("")}</${listType}>`
+    );
+    listType = null;
+    listItems = [];
+  }
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    const ordered = line.match(/^\d+[.)]\s+(.+)$/);
+    const unordered = line.match(/^[-*•]\s+(.+)$/);
+
+    if (ordered) {
+      flushParagraph();
+      if (listType !== "ol") {
+        flushList();
+        listType = "ol";
+      }
+      listItems.push(ordered[1]);
+      continue;
+    }
+
+    if (unordered) {
+      flushParagraph();
+      if (listType !== "ul") {
+        flushList();
+        listType = "ul";
+      }
+      listItems.push(unordered[1]);
+      continue;
+    }
+
+    flushList();
+
+    if (!line) {
+      flushParagraph();
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      const level = Math.min(heading[1].length + 2, 5);
+      output.push(`<h${level}>${formatInlineMarkdown(heading[2])}</h${level}>`);
+      continue;
+    }
+
+    paragraph.push(line);
+  }
+
+  flushParagraph();
+  flushList();
+
+  return output.join("");
+}
+
 function renderContext(items) {
   contextList.innerHTML = "";
 
@@ -103,7 +195,7 @@ function renderTicket(ticket) {
     : "";
 
   ticketMeta.textContent = `Ticket #${ticket.id}${created ? " · " + created : ""}`;
-  aiResponseBox.textContent = ticket.ai_response;
+  aiResponseBox.innerHTML = renderMarkdown(ticket.ai_response);
   renderContext(ticket.retrieved_context);
   resultSection.classList.remove("hidden");
   resultSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
